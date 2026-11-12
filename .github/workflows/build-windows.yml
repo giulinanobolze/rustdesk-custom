@@ -1,0 +1,61 @@
+name: Build RustDesk Windows Custom
+
+on:
+  workflow_dispatch:
+    inputs:
+      rustdesk_version:
+        description: 'Versão do RustDesk (ex: 1.3.2 ou master)'
+        required: true
+        default: '1.3.2'
+      app_name:
+        description: 'Nome do executável gerado'
+        required: true
+        default: 'RustDesk-Custom'
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - name: Clonar código oficial do RustDesk
+        uses: actions/checkout@v4
+        with:
+          repository: rustdesk/rustdesk
+          ref: ${{ github.event.inputs.rustdesk_version }}
+          submodules: recursive
+
+      - name: Configurar Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Instalar Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+
+      - name: Instalar dependências C++ via vcpkg
+        run: |
+          git clone https://github.com/microsoft/vcpkg C:\vcpkg
+          C:\vcpkg\bootstrap-vcpkg.bat
+          C:\vcpkg\vcpkg.exe install libvpx:x64-windows-static libyuv:x64-windows-static opus:x64-windows-static aom:x64-windows-static
+        shell: pwsh
+
+      - name: Injetar Servidor e Chave
+        env:
+          RENDEZVOUS_SERVER: ${{ secrets.RENDEZVOUS_SERVER }}
+          RS_PUB_KEY: ${{ secrets.RS_PUB_KEY }}
+        run: |
+          (Get-Content libs/hbb_common/src/config.rs) -replace 'rs-ny.rustdesk.com', "$env:RENDEZVOUS_SERVER" | Set-Content libs/hbb_common/src/config.rs
+          (Get-Content libs/hbb_common/src/config.rs) -replace 'OeVuKk5nlHiXp\+APNn0Y3pC1Iwpwn44JGqrQCsWqmBw=', "$env:RS_PUB_KEY" | Set-Content libs/hbb_common/src/config.rs
+        shell: pwsh
+
+      - name: Compilar cliente Windows (64-bit)
+        env:
+          VCPKG_ROOT: C:\vcpkg
+        run: |
+          python build.py --portable --flutter
+        shell: pwsh
+
+      - name: Publicar executável
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ github.event.inputs.app_name }}-windows-x64
+          path: target/release/*.exe
