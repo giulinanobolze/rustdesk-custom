@@ -31,11 +31,9 @@ jobs:
         with:
           channel: 'stable'
 
-      - name: Instalar dependências C++ via vcpkg
+      - name: Instalar dependências C++ via vcpkg (Manifest Mode)
         run: |
-          git clone https://github.com/microsoft/vcpkg C:\vcpkg
-          C:\vcpkg\bootstrap-vcpkg.bat
-          C:\vcpkg\vcpkg.exe install libvpx:x64-windows-static libyuv:x64-windows-static opus:x64-windows-static aom:x64-windows-static
+          C:\vcpkg\vcpkg.exe install --triplet x64-windows-static --x-install-root=C:\vcpkg\installed
         shell: pwsh
 
       - name: Injetar Servidor e Chave
@@ -47,10 +45,14 @@ jobs:
           (Get-Content libs/hbb_common/src/config.rs) -replace 'OeVuKk5nlHiXp\+APNn0Y3pC1Iwpwn44JGqrQCsWqmBw=', "$env:RS_PUB_KEY" | Set-Content libs/hbb_common/src/config.rs
         shell: pwsh
 
-      - name: Compilar cliente Windows (64-bit)
+      - name: Preparar Flutter e compilar cliente Windows (64-bit)
         env:
           VCPKG_ROOT: C:\vcpkg
+          VCPKG_DEFAULT_TRIPLET: x64-windows-static
         run: |
+          pushd flutter
+          flutter pub get
+          popd
           python build.py --portable --flutter
         shell: pwsh
 
